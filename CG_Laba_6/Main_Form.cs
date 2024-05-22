@@ -7,7 +7,6 @@ namespace CG_Laba_6
         private const int CellSize = 30;
         private Graphics g;
         private Bitmap bitmap;
-        private List<PointF> startPoints = new List<PointF>();
         private List<Action> drawActions = new List<Action>();
 
         public Main_Form()
@@ -15,8 +14,7 @@ namespace CG_Laba_6
             InitializeComponent();
             bitmap = new Bitmap(GridWidth, GridHeight);
             g = Graphics.FromImage(bitmap);
-            FileInput();
-            DrawConvexHull();
+            ConvexHull();
         }
 
         private void nextStep_button_Click(object sender, EventArgs e)
@@ -24,103 +22,173 @@ namespace CG_Laba_6
             ExecuteNextAction();
         }
 
-        private void DrawConvexHull(PointF? a = null, PointF? b = null, PointF? ñ = null, List<PointF>? currentIterPoints = null)
+        private async void ConvexHull()
         {
-            List<PointF> convertedStartPoints = PointsConvertionToCoordinates(startPoints);
-            List<PointF> convexHull = BruteForceConvexHull(startPoints);
-            List<PointF> sortedConvexHull = SortConvexHull(convexHull);
-            List<PointF> convertedConvexHull = PointsConvertionToCoordinates(sortedConvexHull);
-            drawActions.Add(() => EndDrawing(convertedStartPoints, convertedConvexHull));
-        }
-
-        private void EndDrawing(List<PointF> convertedStartPoints, List<PointF> convertedConvexHull)
-        {
-            ClearCanvas();
-            DrawGrid();
-            drawPoints(Brushes.Black, convertedStartPoints);
-            drawPoints(Brushes.Green, convertedConvexHull);
-            g.DrawPolygon(Pens.Blue, convertedConvexHull.ToArray());
-        }
-
-        private List<PointF> BruteForceConvexHull(List<PointF> points)
-        {
-            List<PointF> convexHull = new List<PointF>();
-            for (int i = 0; i < points.Count; i++)
+            List<PointF> startPoints = FileInput();
+            startPoints = SortPoints(startPoints);
+            int n = startPoints.Count;
+            List<bool> flags = Enumerable.Repeat(true, n).ToList();
+            for (int i = 0; i < n;i++)
             {
-                for (int j = 0; j < points.Count; j++)
+                for (int j = i +1; j < n;j++)
                 {
-                    if (i == j)
-                        continue;
-
-                    bool isConvex = true;
-                    List<PointF> currentConvexHullPoints = new List<PointF>(convexHull);
-                    List<PointF> currentInnerPoints = new List<PointF>();
-                    for (int k = 0; k < points.Count; k++)
+                    for (int k = j + 1; k < n;k++)
                     {
-                        List<PointF> currentIterInnerPoints = new List<PointF>(currentInnerPoints);
-                        if (k == i || k == j)
-                            continue;
-                        PointF a = points[i];
-                        PointF b = points[j];
-                        PointF c = points[k];
-                        float crossProduct = CrossProduct(a, b, c);
-                        
-                        if (crossProduct < 0)
+                        List<PointF> convertedStartPoints = PointsConvertionToCoordinates(startPoints);
+                        List<PointF> currentIterationTriangle = new List<PointF>(3) { startPoints[i], startPoints[j], startPoints[k] };
+                        currentIterationTriangle = PointsConvertionToCoordinates(currentIterationTriangle);
+                        ClearCanvas();
+                        DrawGrid();
+                        DrawPoints(Brushes.Black, convertedStartPoints);
+                        g.DrawPolygon(Pens.Blue, currentIterationTriangle.ToArray());
+                        DrawPoints(Brushes.Magenta, currentIterationTriangle);
+                        await Task.Delay(300);
+                        for (int l = 0; l < n;l++)
                         {
-                            isConvex = false;
-                           drawActions.Add(() => DrawCurrentIteration(a, b, c, currentConvexHullPoints, currentIterInnerPoints, isConvex));
-                            break;
+                            if (l == i || l == j || l == k) continue;
+                            if (IsPointInTriangle(startPoints[i], startPoints[j], startPoints[k], startPoints[l]))
+                            {
+                                List<(int, int)> pairs = new List<(int, int)>() { (i, j), (j, k), (i, k) };
+                                if (!pairs.Any(p => ArePointsCollenear(startPoints[p.Item1], startPoints[p.Item2], startPoints[l])))
+                                {
+                                    flags[l] = false;
+                                }
+                            }
                         }
-                        currentInnerPoints.Add(c);
-                        drawActions.Add(() => DrawCurrentIteration(a,b,c,currentConvexHullPoints,currentIterInnerPoints, isConvex));
-                    }
-
-                    if (isConvex)
-                    {
-                        if (!convexHull.Contains(points[i]))
-                            convexHull.Add(points[i]);
-                        if (!convexHull.Contains(points[j]))
-                            convexHull.Add(points[j]);
                     }
                 }
             }
-            return convexHull;
+            List<PointF> convexHull = new List<PointF>();
+            for(int i = 0; i < n;i++)
+            {
+                if (flags[i])
+                {
+                    convexHull.Add(startPoints[i]);
+                }
+            }
+            DrawConvexHull(startPoints, convexHull);
         }
 
-        private void DrawCurrentIteration(PointF a, PointF b, PointF c, List<PointF> currentConvexHull, List<PointF> currentInnerPoints, bool isConvex)
+        private void DrawConvexHull(List<PointF> startPoints, List<PointF> convexHull)
         {
             ClearCanvas();
             DrawGrid();
             List<PointF> convertedStartPoints = PointsConvertionToCoordinates(startPoints);
-            List<PointF> convertedCurrentConvexHull = PointsConvertionToCoordinates(currentConvexHull);
-            List<PointF> convertedInnerPoints = PointsConvertionToCoordinates(currentInnerPoints);
-            drawPoints(Brushes.Black, convertedStartPoints);
-            drawPoints(Brushes.Green, convertedCurrentConvexHull);
-            drawPoints(Brushes.Yellow, convertedInnerPoints);
-            PointF convertedA = PointConvertToCoordinates(a);
-            PointF convertedB = PointConvertToCoordinates(b);
-            PointF convertedC = PointConvertToCoordinates(c);
-            drawPoint(Brushes.Magenta, convertedA);
-            drawPoint(Brushes.Magenta, convertedB);
-            g.DrawLine(Pens.Blue, convertedA, convertedB);
-            Brush isConvexBrush = Brushes.Yellow;
-            if(!isConvex)
-            {
-                isConvexBrush = Brushes.Red;
-            }
-            drawPoint(isConvexBrush, convertedC);
+            List<PointF> convertedConvexHullPoints = PointsConvertionToCoordinates(convexHull);
+            DrawPoints(Brushes.Black, convertedStartPoints);
+            DrawPoints(Brushes.Magenta, convertedConvexHullPoints);
+            g.DrawPolygon(Pens.Red, convertedConvexHullPoints.ToArray());
         }
 
-        private static float CrossProduct(PointF A, PointF B, PointF C)
+        double AreaCalculation(PointF a, PointF b, PointF c)
         {
-            return (B.X - A.X) * (C.Y - A.Y) - (B.Y - A.Y) * (C.X - A.X);
+            return Math.Abs((a.X * (b.Y - c.Y) + b.X * (c.Y - a.Y) + c.X * (a.Y - b.Y)) / 2);
         }
 
-        private List<PointF> SortConvexHull(List<PointF> convexHull)
+        bool IsPointInTriangle(PointF a, PointF b, PointF c, PointF testPoint)
         {
-            PointF startPoint = convexHull.OrderBy(p => p.Y).ThenBy(p => p.X).First();
-            List<PointF> sortedConvexHull = new List<PointF>(convexHull);
-            sortedConvexHull.Sort((a, b) =>
+            double eps = 0.001;
+            double fullArea = AreaCalculation(a, b, c);
+            double area1 = AreaCalculation(testPoint, b, c);
+            double area2 = AreaCalculation(a, testPoint, c);
+            double area3 = AreaCalculation(a, b, testPoint);
+            return (Math.Abs(fullArea - (area1 + area2 + area3)) < eps);
+        }
+
+        bool ArePointsCollenear(PointF a, PointF b, PointF c)
+        {
+
+            return (c.Y - a.Y) * (b.X - a.X) == (b.Y - a.Y) * (c.X - a.X);
+        }
+
+        //private void EndDrawing(List<PointF> convertedStartPoints, List<PointF> convertedConvexHull)
+        //{
+        //    ClearCanvas();
+        //    DrawGrid();
+        //    drawPoints(Brushes.Black, convertedStartPoints);
+        //    drawPoints(Brushes.Green, convertedConvexHull);
+        //    g.DrawPolygon(Pens.Blue, convertedConvexHull.ToArray());
+        //}
+
+        //private List<PointF> BruteForceConvexHull(List<PointF> points)
+        //{
+        //    List<PointF> convexHull = new List<PointF>();
+        //    for (int i = 0; i < points.Count; i++)
+        //    {
+        //        for (int j = 0; j < points.Count; j++)
+        //        {
+        //            if (i == j)
+        //                continue;
+
+        //            bool isConvex = true;
+        //            List<PointF> currentConvexHullPoints = new List<PointF>(convexHull);
+        //            List<PointF> currentInnerPoints = new List<PointF>();
+        //            for (int k = 0; k < points.Count; k++)
+        //            {
+        //                List<PointF> currentIterInnerPoints = new List<PointF>(currentInnerPoints);
+        //                if (k == i || k == j)
+        //                    continue;
+        //                PointF a = points[i];
+        //                PointF b = points[j];
+        //                PointF c = points[k];
+        //                float crossProduct = CrossProduct(a, b, c);
+
+        //                if (crossProduct < 0)
+        //                {
+        //                    isConvex = false;
+        //                   drawActions.Add(() => DrawCurrentIteration(a, b, c, currentConvexHullPoints, currentIterInnerPoints, isConvex));
+        //                    break;
+        //                }
+        //                currentInnerPoints.Add(c);
+        //                drawActions.Add(() => DrawCurrentIteration(a,b,c,currentConvexHullPoints,currentIterInnerPoints, isConvex));
+        //            }
+
+        //            if (isConvex)
+        //            {
+        //                if (!convexHull.Contains(points[i]))
+        //                    convexHull.Add(points[i]);
+        //                if (!convexHull.Contains(points[j]))
+        //                    convexHull.Add(points[j]);
+        //            }
+        //        }
+        //    }
+        //    return convexHull;
+        //}
+
+        //private void DrawCurrentIteration(PointF a, PointF b, PointF c, List<PointF> currentConvexHull, List<PointF> currentInnerPoints, bool isConvex)
+        //{
+        //    ClearCanvas();
+        //    DrawGrid();
+        //    List<PointF> convertedStartPoints = PointsConvertionToCoordinates(startPoints);
+        //    List<PointF> convertedCurrentConvexHull = PointsConvertionToCoordinates(currentConvexHull);
+        //    List<PointF> convertedInnerPoints = PointsConvertionToCoordinates(currentInnerPoints);
+        //    drawPoints(Brushes.Black, convertedStartPoints);
+        //    drawPoints(Brushes.Green, convertedCurrentConvexHull);
+        //    drawPoints(Brushes.Yellow, convertedInnerPoints);
+        //    PointF convertedA = PointConvertToCoordinates(a);
+        //    PointF convertedB = PointConvertToCoordinates(b);
+        //    PointF convertedC = PointConvertToCoordinates(c);
+        //    drawPoint(Brushes.Magenta, convertedA);
+        //    drawPoint(Brushes.Magenta, convertedB);
+        //    g.DrawLine(Pens.Blue, convertedA, convertedB);
+        //    Brush isConvexBrush = Brushes.Yellow;
+        //    if(!isConvex)
+        //    {
+        //        isConvexBrush = Brushes.Red;
+        //    }
+        //    drawPoint(isConvexBrush, convertedC);
+        //}
+
+        //private static float CrossProduct(PointF A, PointF B, PointF C)
+        //{
+        //    return (B.X - A.X) * (C.Y - A.Y) - (B.Y - A.Y) * (C.X - A.X);
+        //}
+
+        private List<PointF> SortPoints(List<PointF> points)
+        {
+            PointF startPoint = points.OrderBy(p => p.Y).ThenBy(p => p.X).First();
+            List<PointF> sortedPoints = new List<PointF>(points);
+            sortedPoints.Sort((a, b) =>
             {
                 double angleA = Math.Atan2(a.Y - startPoint.Y, a.X - startPoint.X);
                 double angleB = Math.Atan2(b.Y - startPoint.Y, b.X - startPoint.X);
@@ -137,7 +205,7 @@ namespace CG_Laba_6
                 return 0;
             });
 
-            return sortedConvexHull;
+            return sortedPoints;
         }
 
         PointF PointConvertToCoordinates(PointF point)
@@ -159,12 +227,12 @@ namespace CG_Laba_6
             return newPoints;
         }
 
-        public void drawPoint(Brush brush, PointF point)
+        public void DrawPoint(Brush brush, PointF point)
         {
             int r = 10;
             g.FillEllipse(brush, point.X - r / 2, point.Y - r / 2, r, r);
         }
-        public void drawPoints(Brush brush, List<PointF> points)
+        public void DrawPoints(Brush brush, List<PointF> points)
         {
             int r = 10;
             foreach (var point in points)
@@ -173,12 +241,11 @@ namespace CG_Laba_6
             }
         }
 
-        private void FileInput()
+        List<PointF> FileInput()
         {
+            List<PointF> startPoints = new List<PointF>();
             try
             {
-                // Create an instance of StreamReader to read from a file.
-                // The using statement also closes the StreamReader.
                 using (StreamReader sr = new StreamReader("PointsInput.txt"))
                 {
                     string line;
@@ -196,6 +263,7 @@ namespace CG_Laba_6
                 Console.WriteLine("The file could not be read:");
                 Console.WriteLine(e.Message);
             }
+            return startPoints;
         }
         private void ClearCanvas()
         {
